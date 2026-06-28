@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wumpus Logic Navigator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Design Tokens ─────────────────────────────────────────────── */
+    :root {
+      --bg:         #080c10;
+      --panel:      #0d1520;
+      --border:     #1c3050;
+      --accent:     #00e5ff;
+      --accent2:    #39ff14;
+      --danger:     #ff2d55;
+      --warn:       #ffd60a;
+      --muted:      #3a5068;
+      --text:       #c8dff0;
+      --text-dim:   #4d7090;
+      --cell-side:  68px;
+      --gap:        3px;
+    }
+
+    /* ─── Reset & Base ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Share Tech Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,229,255,.08) 0%, transparent 70%);
+    }
+
+    /* ─── Header ─────────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: clamp(1.4rem, 4vw, 2rem);
+      letter-spacing: .12em;
+      color: var(--accent);
+      text-shadow: 0 0 24px rgba(0,229,255,.45);
+    }
+    header p {
+      font-size: .78rem;
+      color: var(--text-dim);
+      letter-spacing: .08em;
+      margin-top: 4px;
+    }
+
+    /* ─── Main layout ────────────────────────────────────────────────── */
+    .workspace {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: 960px;
+    }
+
+    /* ─── Panels ─────────────────────────────────────────────────────── */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .panel-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .65rem;
+      letter-spacing: .2em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    /* ─── Control Panel ──────────────────────────────────────────────── */
+    .ctrl-panel { min-width: 200px; }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: .8rem;
+      color: var(--text-dim);
+    }
+    .field-row label { letter-spacing: .05em; }
+    .field-row input[type="number"] {
+      width: 52px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-family: inherit;
+      font-size: .9rem;
+      padding: 4px 6px;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .field-row input:focus { outline: none; border-color: var(--accent); }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 9px 0;
+      border: none;
+      border-radius: 4px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: .7rem;
+      letter-spacing: .12em;
+      cursor: pointer;
+      transition: filter .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+      margin-bottom: 8px;
+    }
+    .btn-primary:hover { filter: brightness(1.15); }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--accent2);
+      color: var(--accent2);
+    }
+    .btn-secondary:hover { background: rgba(57,255,20,.08); }
+
+    /* ─── Stats Panel ────────────────────────────────────────────────── */
+    .stat-block {
+      margin-bottom: 14px;
+    }
+    .stat-label {
+      font-size: .65rem;
+      color: var(--text-dim);
+      letter-spacing: .1em;
+      margin-bottom: 3px;
+    }
+    .stat-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.4rem;
+      color: var(--accent2);
+    }
+    .stat-value.small { font-size: .88rem; color: var(--warn); }
+
+    /* ─── Legend ─────────────────────────────────────────────────────── */
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+      font-size: .75rem;
+      color: var(--text-dim);
+    }
+    .legend-swatch {
+      width: 16px; height: 16px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* ─── Grid wrapper ───────────────────────────────────────────────── */
+    .grid-wrapper {
+      flex: 1;
+      min-width: 280px;
+    }
+    #arena {
+      display: inline-grid;
+      gap: var(--gap);
+      background: var(--border);
+      padding: var(--gap);
+      border-radius: 6px;
+    }
+
+    /* ─── Individual Cell ────────────────────────────────────────────── */
+    .tile {
+      width:  var(--cell-side);
+      height: var(--cell-side);
+      background: #0a1825;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-size: .65rem;
+      color: var(--text-dim);
+      transition: background .25s;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .tile::before {          /* subtle scan-line effect */
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 3px, rgba(0,0,0,.08) 3px, rgba(0,0,0,.08) 4px
+      );
+      pointer-events: none;
+    }
+
+    /* Cell states */
+    .tile.explored  { background: #111e2d; }
+    .tile.inferred-safe {
+      background: #072010;
+      box-shadow: inset 0 0 10px rgba(57,255,20,.18);
+    }
+    .tile.inferred-danger {
+      background: #1e0508;
+      box-shadow: inset 0 0 10px rgba(255,45,85,.2);
+    }
+    .tile.agent {
+      outline: 2px solid var(--warn);
+      outline-offset: -2px;
+      background: #1a180a;
+    }
+
+    /* Icons */
+    .tile-icon  { font-size: 1.4rem; line-height: 1; }
+    .tile-label { font-size: .58rem; margin-top: 2px; letter-spacing: .04em; }
+    .coord-tag  {
+      position: absolute;
+      top: 3px; left: 4px;
+      font-size: .5rem;
+      color: var(--muted);
+    }
+
+    /* ─── Inference Log ──────────────────────────────────────────────── */
+    #inference-log {
+      width: 100%;
+      max-width: 960px;
+      margin-top: 18px;
+    }
+    #log-output {
+      height: 160px;
+      overflow-y: auto;
+      background: #050d15;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px 12px;
+      font-size: .72rem;
+      line-height: 1.7;
+      color: #6ab0d8;
+    }
+    #log-output .log-ok    { color: var(--accent2); }
+    #log-output .log-warn  { color: var(--warn); }
+    #log-output .log-err   { color: var(--danger); }
+    #log-output .log-info  { color: var(--accent); }
+
+    /* scrollbar */
+    #log-output::-webkit-scrollbar { width: 5px; }
+    #log-output::-webkit-scrollbar-track { background: transparent; }
+    #log-output::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ─── Status bar ─────────────────────────────────────────────────── */
+    #status-bar {
+      margin-top: 10px;
+      font-size: .7rem;
+      color: var(--text-dim);
+      text-align: center;
+      letter-spacing: .06em;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ WUMPUS LOGIC NAVIGATOR</h1>
+  <p>Knowledge-Based Agent · Propositional Logic · Resolution Refutation</p>
+</header>
+
+<div class="workspace">
+
+  <!-- ── Left Sidebar ─────────────────────────────────────── -->
+  <div style="display:flex;flex-direction:column;gap:16px;min-width:190px;">
+
+    <!-- Controls -->
+    <div class="panel ctrl-panel">
+      <div class="panel-title">Environment</div>
+      <div class="field-row">
+        <label>Rows</label>
+        <input type="number" id="inp-rows" value="4" min="3" max="8">
+      </div>
+      <div class="field-row">
+        <label>Columns</label>
+        <input type="number" id="inp-cols" value="4" min="3" max="8">
+      </div>
+      <button class="btn btn-primary" onclick="resetWorld()">↺ RESTART</button>
+      <button class="btn btn-secondary" id="step-btn" onclick="stepAgent()">▶ NEXT MOVE</button>
+    </div>
+
+    <!-- Live Stats -->
+    <div class="panel">
+      <div class="panel-title">Live Metrics</div>
+      <div class="stat-block">
+        <div class="stat-label">INFERENCE STEPS</div>
+        <div class="stat-value" id="metric-steps">0</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">CELLS EXPLORED</div>
+        <div class="stat-value" id="metric-explored">1</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">ACTIVE PERCEPTS</div>
+        <div class="stat-value small" id="metric-percepts">—</div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="panel">
+      <div class="panel-title">Legend</div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#072010;outline:1px solid #39ff14;"></div>
+        Proven Safe
+      </div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#1e0508;outline:1px solid #ff2d55;"></div>
+        Inferred Hazard
+      </div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#111e2d;"></div>
+        Explored
+      </div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#0a1825;"></div>
+        Unknown
+      </div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#1a180a;outline:2px solid #ffd60a;"></div>
+        Agent 🤖
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Grid Area ─────────────────────────────────────────── -->
+  <div class="panel grid-wrapper">
+    <div class="panel-title">World Grid</div>
+    <div id="arena"></div>
+  </div>
+
+</div>
+
+<!-- ── Inference Log ────────────────────────────────────────── -->
+<div class="panel" id="inference-log">
+  <div class="panel-title">Inference Log</div>
+  <div id="log-output"></div>
+</div>
+
+<div id="status-bar">Agent idle — press NEXT MOVE to begin navigation</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     LOGIC ENGINE & AGENT
+     ════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════════════════════════
+   SECTION 1 – PropositionalKB
+   Manages a set of clauses in CNF.
+   Exposes:
+     addClause(literals[])  – add one CNF clause
+     proveByRefutation(lit) – Resolution Refutation: returns bool
+   ══════════════════════════════════════════════════════════════ */
+class PropositionalKB {
+  constructor() {
+    this._clauses = [];   // array of Sets (each Set = one clause)
+    this.totalResolutions = 0;
+  }
+
+  /* Serialise a clause-Set to a canonical string for deduplication */
+  static _key(clauseSet) {
+    return [...clauseSet].sort().join('|');
+  }
+
+  addClause(literals) {
+    const clause = new Set(literals);
+    const key    = PropositionalKB._key(clause);
+    if (!this._clauses.some(c => PropositionalKB._key(c) === key)) {
+      this._clauses.push(clause);
+    }
+  }
+
+  /* Return the negation of a literal string */
+  static _negate(lit) {
+    return lit.startsWith('¬') ? lit.slice(1) : '¬' + lit;
+  }
+
+  /* Resolve two clauses; returns a Set (resolvent) or null if not resolvable */
+  static _resolvePair(a, b) {
+    for (const litA of a) {
+      const complement = PropositionalKB._negate(litA);
+      if (b.has(complement)) {
+        // Build resolvent: union minus the complementary pair
+        const resolvent = new Set([...a, ...b]);
+        resolvent.delete(litA);
+        resolvent.delete(complement);
+        return resolvent;
+      }
+    }
+    return null;
+  }
+
+  /* Resolution Refutation:
+     Proves `goalLiteral` by showing KB ∪ {¬goal} is unsatisfiable.
+     Returns true if proven, false otherwise. */
+  proveByRefutation(goalLiteral) {
+    const negatedGoal = PropositionalKB._negate(goalLiteral);
+    // Working set: copies of KB clauses + {¬goal}
+    const active = this._clauses.map(c => new Set(c));
+    active.push(new Set([negatedGoal]));
+
+    const seen = new Set(active.map(PropositionalKB._key));
+
+    const LIMIT = 3000;
+    while (this.totalResolutions < LIMIT) {
+      let generatedNew = false;
+      for (let i = 0; i < active.length; i++) {
+        for (let j = i + 1; j < active.length; j++) {
+          this.totalResolutions++;
+          const resolvent = PropositionalKB._resolvePair(active[i], active[j]);
+          if (resolvent === null) continue;
+          if (resolvent.size === 0) return true;   // ⊥ – contradiction found
+
+          const rKey = PropositionalKB._key(resolvent);
+          if (!seen.has(rKey)) {
+            seen.add(rKey);
+            active.push(resolvent);
+            generatedNew = true;
+          }
+        }
+      }
+      if (!generatedNew) return false;  // Fixed-point: no new facts derivable
+    }
+    return false; // Safety cut-off
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SECTION 2 – GridWorld
+   Generates the hidden environment.
+   ══════════════════════════════════════════════════════════════ */
+class GridWorld {
+  constructor(rows, cols) {
+    this.rows = rows;
+    this.cols = cols;
+    this.grid = this._populate();
+  }
+
+  _populate() {
+    const g = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (r === 0 && c === 0) continue; // start cell always clear
+        const roll = Math.random();
+        if      (roll < 0.14) g[r][c] = 'PIT';
+        else if (roll < 0.20) g[r][c] = 'WUMPUS';
+      }
+    }
+    return g;
+  }
+
+  cellAt(r, c) { return this.grid[r][c]; }
+
+  /* All four cardinal neighbours within bounds */
+  neighbours(r, c) {
+    return [[-1,0],[1,0],[0,-1],[0,1]]
+      .map(([dr, dc]) => [r + dr, c + dc])
+      .filter(([nr, nc]) => nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols);
+  }
+
+  /* Percepts felt at (r, c) based on surroundings */
+  perceive(r, c) {
+    const percepts = new Set();
+    for (const [nr, nc] of this.neighbours(r, c)) {
+      const t = this.grid[nr][nc];
+      if (t === 'PIT')    percepts.add('BREEZE');
+      if (t === 'WUMPUS') percepts.add('STENCH');
+    }
+    return percepts;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SECTION 3 – LogicAgent
+   Observes percepts → updates KB → queries KB for safe moves.
+   ══════════════════════════════════════════════════════════════ */
+class LogicAgent {
+  constructor(world) {
+    this.world     = world;
+    this.kb        = new PropositionalKB();
+    this.position  = [0, 0];
+    this.explored  = new Set(['0_0']);
+
+    // Seed: start cell is definitely safe
+    this.kb.addClause(['¬PIT_0_0']);
+    this.kb.addClause(['¬WMP_0_0']);
+  }
+
+  /* Encode grid coords to literal prefix */
+  static _id(r, c) { return `${r}_${c}`; }
+
+  /* Update KB from percepts at current position, return percept set */
+  observe() {
+    const [r, c] = this.position;
+    const percepts = this.world.perceive(r, c);
+    const nbrs     = this.world.neighbours(r, c);
+
+    // ── Breeze ───────────────────────────────────────────
+    if (percepts.has('BREEZE')) {
+      // Fact: breeze at (r,c)
+      this.kb.addClause([`BRZ_${LogicAgent._id(r,c)}`]);
+      // Rule: breeze ⇒ at least one neighbour is a pit
+      this.kb.addClause([
+        `¬BRZ_${LogicAgent._id(r,c)}`,
+        ...nbrs.map(([nr,nc]) => `PIT_${LogicAgent._id(nr,nc)}`)
+      ]);
+    } else {
+      this.kb.addClause([`¬BRZ_${LogicAgent._id(r,c)}`]);
+      // No breeze ⇒ no pits in any neighbour
+      for (const [nr, nc] of nbrs) {
+        this.kb.addClause([`¬PIT_${LogicAgent._id(nr,nc)}`]);
+      }
+    }
+
+    // ── Stench ───────────────────────────────────────────
+    if (percepts.has('STENCH')) {
+      this.kb.addClause([`STN_${LogicAgent._id(r,c)}`]);
+      this.kb.addClause([
+        `¬STN_${LogicAgent._id(r,c)}`,
+        ...nbrs.map(([nr,nc]) => `WMP_${LogicAgent._id(nr,nc)}`)
+      ]);
+    } else {
+      this.kb.addClause([`¬STN_${LogicAgent._id(r,c)}`]);
+      for (const [nr, nc] of nbrs) {
+        this.kb.addClause([`¬WMP_${LogicAgent._id(nr,nc)}`]);
+      }
+    }
+
+    return percepts;
+  }
+
+  /* Query KB: can we prove cell (r,c) is safe? */
+  isSafeByInference(r, c) {
+    const id = LogicAgent._id(r, c);
+    return this.kb.proveByRefutation(`¬PIT_${id}`) &&
+           this.kb.proveByRefutation(`¬WMP_${id}`);
+  }
+
+  /* Query KB: can we prove the cell contains a hazard? */
+  isDangerByInference(r, c) {
+    const id = LogicAgent._id(r, c);
+    return this.kb.proveByRefutation(`PIT_${id}`) ||
+           this.kb.proveByRefutation(`WMP_${id}`);
+  }
+
+  /* Choose and execute one move; return result object */
+  step() {
+    const [r, c] = this.position;
+    const nbrs   = this.world.neighbours(r, c);
+
+    for (const [nr, nc] of nbrs) {
+      if (this.explored.has(`${nr}_${nc}`)) continue;
+
+      const safe = this.isSafeByInference(nr, nc);
+      if (safe) {
+        this.position = [nr, nc];
+        this.explored.add(`${nr}_${nc}`);
+        return { moved: true, to: [nr, nc], proven: true };
+      }
+    }
+
+    // No proven-safe move; attempt a cautious random unexplored neighbour
+    const candidates = nbrs.filter(([nr,nc]) => !this.explored.has(`${nr}_${nc}`));
+    if (candidates.length) {
+      const [nr, nc] = candidates[Math.floor(Math.random() * candidates.length)];
+      this.position = [nr, nc];
+      this.explored.add(`${nr}_${nc}`);
+      return { moved: true, to: [nr, nc], proven: false };
+    }
+
+    return { moved: false };
+  }
+
+  get inferenceCount() { return this.kb.totalResolutions; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SECTION 4 – Rendering & UI wiring
+   ══════════════════════════════════════════════════════════════ */
+let gWorld = null;
+let gAgent = null;
+let gRows  = 4;
+let gCols  = 4;
+
+function resetWorld() {
+  gRows  = Math.max(3, Math.min(8, parseInt(document.getElementById('inp-rows').value) || 4));
+  gCols  = Math.max(3, Math.min(8, parseInt(document.getElementById('inp-cols').value) || 4));
+
+  gWorld = new GridWorld(gRows, gCols);
+  gAgent = new LogicAgent(gWorld);
+
+  clearLog();
+  appendLog('info', `World reset → ${gRows}×${gCols} grid`);
+  appendLog('info', 'Agent spawned at (0,0). KB seeded with start-cell axioms.');
+
+  updateMetrics([]);
+  renderArena();
+  document.getElementById('status-bar').textContent =
+    'Agent ready — press NEXT MOVE to begin navigation';
+}
+
+function stepAgent() {
+  if (!gWorld || !gAgent) { resetWorld(); return; }
+
+  // 1. Observe & update KB
+  const percepts = gAgent.observe();
+
+  // 2. Log percepts
+  const pArr = [...percepts];
+  appendLog('info', `Percepts at (${gAgent.position.join(',')}): ${pArr.length ? pArr.join(' + ') : 'None'}`);
+
+  // 3. Choose next move
+  const result = gAgent.step();
+
+  if (result.moved) {
+    const [nr, nc] = result.to;
+    const hazard   = gWorld.cellAt(nr, nc);
+
+    if (result.proven) {
+      appendLog('ok', `✔ Inference proved (${nr},${nc}) safe → moved there.`);
+    } else {
+      appendLog('warn', `⚠ No proven-safe move. Venturing to (${nr},${nc}) cautiously.`);
+    }
+
+    if (hazard === 'PIT') {
+      appendLog('err', `💀 FELL INTO A PIT at (${nr},${nc})! Game over.`);
+      document.getElementById('status-bar').textContent = '⛔ GAME OVER — Fell into a pit. Restart.';
+      renderArena();
+      updateMetrics(pArr);
+      document.getElementById('step-btn').disabled = true;
+      return;
+    }
+    if (hazard === 'WUMPUS') {
+      appendLog('err', `💀 EATEN BY WUMPUS at (${nr},${nc})! Game over.`);
+      document.getElementById('status-bar').textContent = '⛔ GAME OVER — Wumpus got you. Restart.';
+      renderArena();
+      updateMetrics(pArr);
+      document.getElementById('step-btn').disabled = true;
+      return;
+    }
+
+    document.getElementById('status-bar').textContent =
+      `Agent at (${nr},${nc}) · ${gAgent.explored.size} cells explored`;
+  } else {
+    appendLog('warn', '⚠ Agent is completely surrounded — no unvisited neighbours.');
+    document.getElementById('status-bar').textContent = 'Agent surrounded. No moves remain.';
+  }
+
+  updateMetrics(pArr);
+  renderArena();
+}
+
+/* Build / refresh the grid DOM */
+function renderArena() {
+  const arena = document.getElementById('arena');
+  const cellPx = Math.min(68, Math.floor((window.innerWidth * .55) / gCols));
+  arena.style.gridTemplateColumns = `repeat(${gCols}, ${cellPx}px)`;
+  arena.style.setProperty('--cell-side', cellPx + 'px');
+  arena.innerHTML = '';
+
+  const [ar, ac] = gAgent.position;
+
+  for (let r = 0; r < gRows; r++) {
+    for (let c = 0; c < gCols; c++) {
+      const tile   = document.createElement('div');
+      tile.className = 'tile';
+      tile.style.width  = cellPx + 'px';
+      tile.style.height = cellPx + 'px';
+
+      const coordTag = document.createElement('span');
+      coordTag.className = 'coord-tag';
+      coordTag.textContent = `${r},${c}`;
+      tile.appendChild(coordTag);
+
+      const isExplored = gAgent.explored.has(`${r}_${c}`);
+      const isAgent    = r === ar && c === ac;
+
+      /* State classes */
+      if (isExplored) tile.classList.add('explored');
+      if (isAgent)    tile.classList.add('agent');
+
+      if (!isAgent) {
+        if (gAgent.isSafeByInference(r, c))    tile.classList.add('inferred-safe');
+        else if (gAgent.isDangerByInference(r,c)) tile.classList.add('inferred-danger');
+      }
+
+      /* Icon + label for explored cells */
+      const iconEl  = document.createElement('div');
+      iconEl.className = 'tile-icon';
+      const labelEl = document.createElement('div');
+      labelEl.className = 'tile-label';
+
+      if (isAgent) {
+        iconEl.textContent  = '🤖';
+        labelEl.textContent = 'AGENT';
+      } else if (isExplored) {
+        const hazard = gWorld.cellAt(r, c);
+        if (hazard === 'PIT')    { iconEl.textContent = '🕳️'; labelEl.textContent = 'PIT'; }
+        else if (hazard === 'WUMPUS') { iconEl.textContent = '👹'; labelEl.textContent = 'WUMPUS'; }
+        else { iconEl.textContent = '✔'; labelEl.textContent = 'SAFE'; labelEl.style.color = 'var(--accent2)'; }
+      } else {
+        iconEl.textContent  = '?';
+        labelEl.textContent = '';
+      }
+
+      tile.appendChild(iconEl);
+      tile.appendChild(labelEl);
+      arena.appendChild(tile);
+    }
+  }
+}
+
+function updateMetrics(perceptArr) {
+  document.getElementById('metric-steps').textContent    = gAgent.inferenceCount;
+  document.getElementById('metric-explored').textContent = gAgent.explored.size;
+  document.getElementById('metric-percepts').textContent =
+    perceptArr.length ? perceptArr.join(' · ') : '—';
+}
+
+/* Log helpers */
+function clearLog() {
+  document.getElementById('log-output').innerHTML = '';
+  appendLog('info', '─── Session started ───');
+}
+
+function appendLog(type, msg) {
+  const out  = document.getElementById('log-output');
+  const line = document.createElement('div');
+  line.className = `log-${type}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}]  ${msg}`;
+  out.appendChild(line);
+  out.scrollTop = out.scrollHeight;
+}
+
+/* ── Boot ── */
+resetWorld();
+</script>
+</body>
+</html>
